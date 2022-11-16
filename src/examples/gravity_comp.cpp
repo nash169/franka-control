@@ -55,51 +55,24 @@ int main(int argc, char** argv)
         Eigen::Vector3d initial_position;
         double time = 0.0;
         auto get_position = [](const franka::RobotState& robot_state) {
+            auto copy_array = robot_state.O_T_EE;
+            Eigen::VectorXd vec = Eigen::Map<Eigen::VectorXd>(copy_array.data(), copy_array.size());
+
+            // std::cout << vec.transpose() << std::endl;
+
+            Eigen::MatrixXd mat = Eigen::Map<Eigen::MatrixXd>(vec.data(), 4, 4);
+
+            // std::cout << mat << std::endl;
+
             return Eigen::Vector3d(robot_state.O_T_EE[12], robot_state.O_T_EE[13],
                 robot_state.O_T_EE[14]);
         };
-        auto force_control_callback = [&](const franka::RobotState& robot_state,
-                                          franka::Duration period) -> franka::Torques {
-            time += period.toSec();
 
-            if (time == 0.0) {
-                initial_position = get_position(robot_state);
-            }
-
-            // if (time > 0 && (get_position(robot_state) - initial_position).norm() > 0.1) {
-            //     throw std::runtime_error("Aborting; too far away from starting pose!");
-            // }
-
-            // get state variables
-            std::array<double, 42> jacobian_array = model.zeroJacobian(franka::Frame::kEndEffector, robot_state);
-
-            Eigen::Map<const Eigen::Matrix<double, 6, 7>> jacobian(jacobian_array.data());
-            Eigen::Map<const Eigen::Matrix<double, 7, 1>> tau_measured(robot_state.tau_J.data());
-            Eigen::Map<const Eigen::Matrix<double, 7, 1>> gravity(gravity_array.data());
-
-            Eigen::VectorXd tau_d(7), desired_force_torque(6), tau_cmd(7), tau_ext(7);
-            desired_force_torque.setZero();
-            desired_force_torque(2) = desired_mass * -9.81;
-            tau_ext << tau_measured - gravity - initial_tau_ext;
-            tau_d << jacobian.transpose() * desired_force_torque;
-            tau_error_integral += period.toSec() * (tau_d - tau_ext);
-            // FF + PI control
-            tau_cmd << tau_d + k_p * (tau_d - tau_ext) + k_i * tau_error_integral;
-
-            // Smoothly update the mass to reach the desired target value
-            desired_mass = filter_gain * target_mass + (1 - filter_gain) * desired_mass;
-
-            std::array<double, 7> tau_d_array{};
-            Eigen::VectorXd::Map(&tau_d_array[0], 7) = tau_cmd;
-            return tau_d_array;
+        auto force_control_callback = [&](const franka::RobotState& robot_state, franka::Duration) -> franka::Torques {
+            get_position(robot_state);
+            return {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
         };
-        std::cout << "WARNING: Make sure sure that no endeffector is mounted and that the robot's last "
-                     "joint is "
-                     "in contact with a horizontal rigid surface before starting. Keep in mind that "
-                     "collision thresholds are set to high values."
-                  << std::endl
-                  << "Press Enter to continue..." << std::endl;
-        std::cin.ignore();
+
         // start real-time control loop
         robot.control(force_control_callback);
     }

@@ -9,12 +9,13 @@ using namespace control_lib;
 
 struct Params {
     struct controller : public defaults::controller {
+        // Integration time step controller
+        PARAM_SCALAR(double, dt, 0.01);
     };
 
     struct feedback : public defaults::feedback {
-    };
-
-    struct linear_dynamics : public defaults::linear_dynamics {
+        // Output dimension
+        PARAM_SCALAR(size_t, d, 7);
     };
 };
 
@@ -26,10 +27,10 @@ public:
         _dt = 0.01;
 
         // gains
-        Eigen::MatrixXd K = 1 * Eigen::MatrixXd::Identity(7, 7), D = 0.1 * Eigen::MatrixXd::Identity(7, 7);
+        Eigen::MatrixXd K = 15 * Eigen::MatrixXd::Identity(7, 7), D = 5 * Eigen::MatrixXd::Identity(7, 7);
 
         // goal
-        spatial::RN<7> ref((Eigen::Matrix<double, 7, 1>() << 0.365308, -0.0810892, 1.13717, 0.365308, -0.0810892, 1.13717).finished());
+        spatial::RN<7> ref((Eigen::Matrix<double, 7, 1>() << 0.300325, 0.596986, 0.140127, -1.44853, 0.15547, 2.31046, 0.690596).finished());
         ref._vel = Eigen::Matrix<double, 7, 1>::Zero();
 
         // set controller
@@ -41,6 +42,10 @@ public:
         // current state
         spatial::RN<7> curr(jointPosition(state));
         curr._vel = jointVelocity(state);
+
+        // auto tau = _controller.action(curr);
+
+        // std::cout << tau.transpose() << std::endl;
 
         return _controller.action(curr);
     }
@@ -56,5 +61,18 @@ protected:
 int main(int argc, char const* argv[])
 {
     Franka robot("franka");
+
+    // franka::RobotState state = robot.robot().readOnce();
+
+    // auto ctr = std::make_unique<ConfigController>();
+
+    // std::cout << ctr->action(state) << std::endl;
+
+    // std::cout << ctr->jointPosition(state).transpose() << std::endl;
+
+    robot.setJointController(std::make_unique<ConfigController>());
+
+    robot.torque();
+
     return 0;
 }

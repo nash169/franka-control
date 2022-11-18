@@ -35,8 +35,8 @@ blddir = "build"
 libdir = "franka_control"
 
 compiler = "cxx"
-required = ["libfranka"]
-optional = ["utilslib"]
+required = ["libfranka", "utilslib"]
+optional = ["controllib"]
 
 
 def options(opt):

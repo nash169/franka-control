@@ -1,8 +1,10 @@
 #ifndef FRANKACONTROL_ABSTRACTCONTROL_HPP
 #define FRANKACONTROL_ABSTRACTCONTROL_HPP
 
-#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <franka/model.h>
 #include <franka/robot_state.h>
+#include <memory>
 
 namespace franka_control {
     namespace control {
@@ -12,32 +14,49 @@ namespace franka_control {
 
             ~AbstractControl() = default;
 
+            // set model
+            void setModel(const std::shared_ptr<franka::Model>& model)
+            {
+                _model = model;
+            }
+
+            Eigen::Matrix<double, 6, 7> jacobian(const franka::RobotState& state)
+            {
+                return Eigen::Map<const Eigen::Matrix<double, 6, 7>>(_model->zeroJacobian(franka::Frame::kEndEffector, state).data());
+            }
+
             // Get joint position
             Eigen::Matrix<double, 7, 1> jointPosition(const franka::RobotState& state)
             {
                 return Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.q.data());
             }
 
+            // Get joint velocity
             Eigen::Matrix<double, 7, 1> jointVelocity(const franka::RobotState& state)
             {
                 return Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.dq.data());
             }
 
+            // Get joint torques
             Eigen::Matrix<double, 7, 1> jointTorques(const franka::RobotState& state)
             {
                 return Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.tau_J.data());
             }
 
-            Eigen::Matrix<double, 7, 1> taskPose(const franka::RobotState& state)
+            // Get end-effector pose
+            Eigen::Affine3d taskPose(const franka::RobotState& state)
             {
-                Eigen::Vector3d pos(state.O_T_EE[12], state.O_T_EE[13], state.O_T_EE[14]);
-                Eigen::Matrix3d rot;
-                rot << state.O_T_EE[0], state.O_T_EE[1], state.O_T_EE[2],
-                    state.O_T_EE[4], state.O_T_EE[5], state.O_T_EE[6],
-                    state.O_T_EE[8], state.O_T_EE[9], state.O_T_EE[10];
-
-                return Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.q.data());
+                return Eigen::Affine3d(Eigen::Matrix4d::Map(state.O_T_EE.data()));
             }
+
+            // Get end-effector velocity
+            Eigen::Matrix<double, 6, 1> taskVelocity(const franka::RobotState& state)
+            {
+                return jacobian(state) * jointPosition(state);
+            }
+
+        protected:
+            std::shared_ptr<franka::Model> _model;
         };
 
     } // namespace control

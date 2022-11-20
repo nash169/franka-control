@@ -30,7 +30,7 @@ namespace franka_control {
                 tools::setDefaultBehavior(*_robot);
 
                 // load the kinematics and dynamics model
-                franka::Model model = _robot->loadModel();
+                _model = std::make_shared<franka::Model>(_robot->loadModel());
             }
             catch (const std::exception& ex) {
                 // print exception
@@ -46,6 +46,7 @@ namespace franka_control {
         Franka& setJointController(std::unique_ptr<control::JointControl> controller)
         {
             _joint_controller = std::move(controller);
+            _joint_controller->setModel(_model);
 
             return *this;
         }
@@ -53,6 +54,7 @@ namespace franka_control {
         Franka& setTaskController(std::unique_ptr<control::TaskControl> controller)
         {
             _task_controller = std::move(controller);
+            _task_controller->setModel(_model);
 
             return *this;
         }
@@ -64,6 +66,7 @@ namespace franka_control {
             auto start = [&]() -> Eigen::Matrix<double, 7, 1> {
                 std::this_thread::sleep_for(std::chrono::seconds(delay));
                 std::cout << "Start Torque Control" << std::endl;
+                // std::this_thread::sleep_for(3s);
                 return Eigen::Matrix<double, 7, 1>::Zero();
             };
 
@@ -73,6 +76,7 @@ namespace franka_control {
                 if (task.wait_for(0ms) == std::future_status::ready) {
                     tau = task.get();
                     task = std::async(std::launch::async, &control::JointControl::action, _joint_controller.get(), robot_state);
+                    // task = std::async(std::launch::async, start);
                 }
 
                 return {{tau[0], tau[1], tau[2], tau[3], tau[4], tau[5], tau[6]}};
@@ -186,7 +190,7 @@ namespace franka_control {
         std::unique_ptr<franka::Robot> _robot;
 
         // Model
-        std::unique_ptr<franka::Model> _model;
+        std::shared_ptr<franka::Model> _model;
 
         // Controllers
         std::unique_ptr<control::JointControl> _joint_controller;

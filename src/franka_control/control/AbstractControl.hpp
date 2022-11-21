@@ -52,7 +52,7 @@ namespace franka_control {
             // Get end-effector velocity
             Eigen::Matrix<double, 6, 1> taskVelocity(const franka::RobotState& state)
             {
-                return jacobian(state) * jointPosition(state);
+                return jacobian(state) * jointVelocity(state);
             }
 
         protected:

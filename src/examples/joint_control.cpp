@@ -27,7 +27,7 @@ public:
         _dt = 0.01;
 
         // gains
-        Eigen::MatrixXd K = 15 * Eigen::MatrixXd::Identity(7, 7), D = 5 * Eigen::MatrixXd::Identity(7, 7);
+        Eigen::MatrixXd K = 10 * Eigen::MatrixXd::Identity(7, 7), D = 1 * Eigen::MatrixXd::Identity(7, 7);
 
         // goal
         spatial::RN<7> ref((Eigen::Matrix<double, 7, 1>() << 0.300325, 0.596986, 0.140127, -1.44853, 0.15547, 2.31046, 0.690596).finished());

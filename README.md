@@ -1,2 +1,8 @@
-# franka-control
+# Franka Control
 Wrapper of libfranka to contro Franka robotic arm directly, ROS independent.
+
+## ToDo 
+- https://www.modernescpp.com/index.php/multithreading-in-c-17-and-c-20
+- https://en.wikipedia.org/wiki/Special_unitary_group
+- https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html#TutorialGeoTransform
+- https://frankaemika.github.io/docs/libfranka.html

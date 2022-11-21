@@ -59,6 +59,20 @@ namespace franka_control {
             return *this;
         }
 
+        void move()
+        {
+            auto controller = [&](const franka::RobotState& robot_state, franka::Duration period) -> franka::Torques {
+                return {{0, 0, 0, 0, 0, 0, 0}};
+            };
+
+            try {
+                _robot->control(controller);
+            }
+            catch (const std::exception& e) {
+                std::cerr << e.what() << '\n';
+            }
+        }
+
         void torque(const size_t& delay = 1)
         {
             Eigen::Matrix<double, 7, 1> tau = Eigen::Matrix<double, 7, 1>::Zero();
@@ -155,15 +169,32 @@ namespace franka_control {
             auto start = [&]() {
                 std::this_thread::sleep_for(std::chrono::seconds(delay));
                 std::cout << "Start Recording" << std::endl;
+                recorder.write("joint position - joint velocity - ee pose -- ee velocity - torque");
             };
 
             auto task = std::async(std::launch::async, start);
 
-            auto record = [&](const franka::RobotState& robot_state, franka::Duration period) {
-                // End Effector
-                Eigen::Map<const Eigen::Matrix<double, 1, 16>> ee(robot_state.O_T_EE.data());
+            auto record = [&](const franka::RobotState& state, franka::Duration period) {
+                Eigen::Matrix<double, 1, 33> record_vec;
 
-                recorder.append(ee);
+                // Joint position
+                record_vec.head(7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.q.data());
+
+                // Joint velocity
+                record_vec.segment(7, 7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.dq.data());
+
+                // End-effector pose
+                Eigen::Affine3d pose(Eigen::Matrix4d::Map(state.O_T_EE.data()));
+                Eigen::AngleAxisd aa(pose.linear());
+                record_vec.segment(14, 6) << pose.translation().transpose(), aa.angle() * aa.axis().transpose();
+
+                // End-effector velocity
+                record_vec.segment(20, 6) = Eigen::Map<const Eigen::Matrix<double, 6, 7>>(_model->zeroJacobian(franka::Frame::kEndEffector, state).data()) * record_vec.segment(7, 7).transpose();
+
+                // Torques
+                record_vec.tail(7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.tau_J.data());
+
+                recorder.append(record_vec);
             };
 
             size_t time = 0;

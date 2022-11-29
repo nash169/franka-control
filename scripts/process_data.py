@@ -8,19 +8,24 @@ import matplotlib.pyplot as plt
 
 dataset = sys.argv[1]
 
-data = np.loadtxt(os.path.join('outputs', '{}.csv'.format(dataset + "_1")))
-for i in range(2, int(sys.argv[2]) + 1):
-    data = np.append(data, np.loadtxt(os.path.join(
-        'outputs', '{}.csv'.format(dataset + "_"+str(i)))), axis=0)
+data = np.loadtxt(os.path.join('outputs', '{}.csv'.format(dataset + "_2")))
+attractor = data[-1, 14:20]
+data[:, 14:20] -= attractor
+for i in range(3, int(sys.argv[2]) + 1):
+    traj = np.loadtxt(os.path.join(
+        'outputs', '{}.csv'.format(dataset + "_"+str(i))))
+    traj[:, 14:20] -= traj[-1, 14:20]
+    data = np.append(data, traj, axis=0)
 
 # data = data[200:-600, :]
+data[:, 14:20] += attractor
+np.savetxt('outputs/robot_demo.csv', data[:, 14:26])
 
 joint_pos = data[:, :7]
 joint_vel = data[:, 7:14]
 task_pose = data[:, 14:20]
 task_vel = data[:, 20:26]
 torques = data[:, 26:]
-
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")

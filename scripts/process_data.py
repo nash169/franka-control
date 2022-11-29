@@ -7,8 +7,13 @@ import os
 import matplotlib.pyplot as plt
 
 dataset = sys.argv[1]
-data = np.loadtxt(os.path.join('outputs', '{}.csv'.format(dataset)))
-data = data[200:-600, :]
+
+data = np.loadtxt(os.path.join('outputs', '{}.csv'.format(dataset + "_1")))
+for i in range(2, int(sys.argv[2]) + 1):
+    data = np.append(data, np.loadtxt(os.path.join(
+        'outputs', '{}.csv'.format(dataset + "_"+str(i)))), axis=0)
+
+# data = data[200:-600, :]
 
 joint_pos = data[:, :7]
 joint_vel = data[:, 7:14]

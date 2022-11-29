@@ -31,11 +31,11 @@ public:
         _dt = 0.01;
 
         // set controller gains
-        Eigen::MatrixXd D = 5 * Eigen::MatrixXd::Identity(6, 6);
+        Eigen::MatrixXd D = 0.1 * Eigen::MatrixXd::Identity(6, 6);
         _controller.setDamping(D);
 
         // set ds gains
-        Eigen::MatrixXd A = 1 * Eigen::MatrixXd::Identity(6, 6);
+        Eigen::MatrixXd A = 0.05 * Eigen::MatrixXd::Identity(6, 6);
         _ds.setDynamicsMatrix(A);
 
         // set ds attractor

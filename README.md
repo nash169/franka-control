@@ -1,5 +1,5 @@
 # Franka Control
-Wrapper of libfranka to contro Franka robotic arm directly, ROS independent.
+Wrapper of libfranka to contro Franka robotic arm directly with asynchronous multithreading, ROS independent.
 
 ## ToDo 
 - https://www.modernescpp.com/index.php/multithreading-in-c-17-and-c-20

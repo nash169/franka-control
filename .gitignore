@@ -405,4 +405,5 @@ TSWLatexianTemp*
 *.sta
 
 waf_configure
-install
+install/
+outputs/

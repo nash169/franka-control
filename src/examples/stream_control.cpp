@@ -7,150 +7,124 @@
 #include <optitrack_lib/Optitrack.hpp>
 
 // ZMQ Stream
-// #include <zmq_stream/Publisher.hpp>
-// #include <zmq_stream/Subscriber.hpp>
 #include <zmq_stream/Requester.hpp>
 
-#include <beautiful_bullet/bodies/MultiBody.hpp>
+// Task Space Manifolds
+#include <control_lib/spatial/R.hpp>
+#include <control_lib/spatial/SO.hpp>
 
-#include <utils_lib/Timer.hpp>
+// Task Space Dynamical System
+#include <control_lib/controllers/LinearDynamics.hpp>
+
+// Task Space Derivative Controller
+#include <control_lib/controllers/Feedback.hpp>
 
 using namespace franka_control;
 using namespace optitrack_lib;
 using namespace zmq_stream;
-using namespace beautiful_bullet;
+using namespace control_lib;
 
-class TaskController : public franka_control::control::JointControl {
+using R3 = spatial::R<3>;
+using SO3 = spatial::SO<3, true>;
+
+struct Params {
+    struct controller : public defaults::controller {
+        // Integration time step controller
+        PARAM_SCALAR(double, dt, 0.01);
+    };
+
+    struct feedback : public defaults::feedback {
+        // Output dimension
+        PARAM_SCALAR(size_t, d, 6);
+    };
+
+    struct linear_dynamics : public defaults::linear_dynamics {
+    };
+};
+
+class StreamController : public control::JointControl {
 public:
-    TaskController() : franka_control::control::JointControl()
+    StreamController() : control::JointControl()
     {
-        // step
-        _dt = 0.01;
-
-        // ref
-        _xRef << 0.683783, 0.308249, 0.185577;
-        _oRef << 0.922046, 0.377679, 0.0846751,
+        // reference
+        Eigen::Vector3d position(0.683783, 0.308249, 0.185577);
+        Eigen::Matrix3d orientation;
+        orientation << 0.922046, 0.377679, 0.0846751,
             0.34527, -0.901452, 0.261066,
             0.17493, -0.211479, -0.9616;
 
-        // _publisher.configure("0.0.0.0", "5511");
-        // _subscriber.configure("128.178.145.171", "5510");
-        // _requester.configure("128.178.145.171", "5511");
+        _r3_ref = R3(position);
+        _so3_ref = SO3(orientation);
 
-        franka = std::make_shared<bodies::MultiBody>("models/franka/urdf/panda.urdf");
+        // r3 ds
+        Eigen::MatrixXd At = 10.0 * Eigen::MatrixXd::Identity(3, 3);
+        _r3_ds.setDynamicsMatrix(At);
+        _r3_ds.setReference(_r3_ref);
+
+        // r3 feedback
+        Eigen::MatrixXd Dt = 5.0 * Eigen::MatrixXd::Identity(3, 3);
+        _r3_feedback.setDamping(Dt);
+
+        // rotation ds
+        Eigen::MatrixXd Ar = 10.0 * Eigen::MatrixXd::Identity(3, 3);
+        _so3_ds.setDynamicsMatrix(Ar);
+        _so3_ds.setReference(_so3_ref);
+
+        // so3 feedback
+        Eigen::MatrixXd Dr = 5.0 * Eigen::MatrixXd::Identity(3, 3);
+        _so3_feedback.setDamping(Dr);
+
+        // Zmq
+        _requester.configure("128.178.145.171", "5511");
     }
 
     Eigen::Matrix<double, 7, 1> action(const franka::RobotState& state) override
     {
-        // current state (ds input)
+        // current task space state
         auto pose = taskPose(state);
+        R3 _r3_curr(pose.translation());
+        SO3 _so3_curr(pose.linear());
 
-        Eigen::Matrix<double, 6, 1> error;
-        error.head(3) << pose.translation() - _xRef;
+        Eigen::Matrix<double, 6, 7> jac = jacobian(state);
+        Eigen::Matrix<double, 6, 1> vel = jac * jointVelocity(state);
+        _r3_curr._v = vel.head(3);
+        _so3_curr._v = vel.tail(3);
 
-        // orientation error
-        Eigen::Quaterniond orientation(pose.linear()), orientation_d(_oRef);
-        // "difference" quaternion
-        if (orientation_d.coeffs().dot(orientation.coeffs()) < 0.0) {
-            orientation.coeffs() << -orientation.coeffs();
-        }
-        // "difference" quaternion
-        Eigen::Quaterniond error_quaternion(orientation.inverse() * orientation_d);
-        error.tail(3) << error_quaternion.x(), error_quaternion.y(), error_quaternion.z();
-        // Transform to base frame
-        error.tail(3) << -pose.linear() * error.tail(3);
+        // ds
+        // _r3_ref._v = _requester.request<Eigen::VectorXd>(_r3_curr._x, 3);
+        _r3_ref._v = _r3_ds.action(_r3_curr);
+        _so3_ref._v = _so3_ds.action(_so3_curr);
 
-        // std::cout << "quat1" << std::endl;
-        // std::cout << error.tail(3).transpose() << std::endl;
+        // std::cout << "C++" << std::endl;
+        // std::cout << _r3_ref._v.transpose() << std::endl;
+        // std::cout << "python" << std::endl;
+        // std::cout << _requester.request<Eigen::VectorXd>(_r3_curr._x, 3).transpose() << std::endl;
 
-        // DS
-        Eigen::MatrixXd A = 10 * Eigen::MatrixXd::Identity(6, 6);
-        auto x_dot = -A * error;
-
-        // jacobian
-        auto jac = jacobian(state);
-
-        // Controller
-        Eigen::MatrixXd D = 1 * Eigen::MatrixXd::Identity(6, 6);
-        auto force = -D * (jac * jointVelocity(state) - x_dot);
-
-        Eigen::Matrix<double, 7, 1> tau = jac.transpose() * force;
-
-        auto aa1 = Eigen::AngleAxisd(error_quaternion);
-        auto aa2 = Eigen::AngleAxisd(_oRef.transpose() * pose.linear());
-        auto aa3 = Eigen::AngleAxisd(pose.linear() * _oRef.transpose());
-        auto aa4 = Eigen::AngleAxisd(pose.linear().transpose() * _oRef);
-        // std::cout << "quat2" << std::endl;
-        // std::cout << sin(aa.angle() / 2) * aa.axis().transpose() << std::endl;
-
-        std::cout << "quat1" << std::endl;
-        std::cout << aa1.angle() * (pose.linear() * aa1.axis()).transpose() << std::endl;
-        std::cout << "quat2" << std::endl;
-        std::cout << aa2.angle() * aa2.axis().transpose() << std::endl;
-        std::cout << "quat3" << std::endl;
-        std::cout << aa3.angle() * aa3.axis().transpose() << std::endl;
-        std::cout << "quat4" << std::endl;
-        std::cout << aa4.angle() * aa4.axis().transpose() << std::endl;
-
-        // auto tmp = Eigen::AngleAxisd(pose.linear() * omega_skew);
-        // std::cout << tmp.angle() * tmp.axis().transpose() << std::endl;
-        // std::cout << omega.transpose() << std::endl;
-        // std::cout << "hello" << std::endl;
-        // auto tmp = Eigen::Vector3d(error_quaternion.x(), error_quaternion.y(), error_quaternion.z());
-        // std::cout << pose.linear() << std::endl;
-        // std::cout << (pose.rotation() * tmp).transpose() << std::endl;
-
-        // {
-        // // utils_lib::Timer time;
-        // auto jac_pinocchio1 = franka->jacobian(jointPosition(state), "panda_link7", pinocchio::LOCAL);
-        // auto jac_pinocchio2 = franka->jacobian(jointPosition(state), "panda_link7", pinocchio::LOCAL_WORLD_ALIGNED);
-        // auto jac_pinocchio3 = franka->jacobian(jointPosition(state), "panda_link7", pinocchio::WORLD);
-
-        // // }
-        // Eigen::Matrix<double, 6, 6> mat;
-        // mat.setZero();
-        // mat.block(0, 0, 3, 3) = pose.rotation();
-        // mat.block(3, 3, 3, 3) = pose.rotation();
-        // std::cout << "jac1" << std::endl;
-        // std::cout << jac_pinocchio1 << std::endl;
-        // std::cout << "jac2" << std::endl;
-        // std::cout << jac_pinocchio2 << std::endl;
-        // std::cout << "jac3" << std::endl;
-        // std::cout << jac_pinocchio3 << std::endl;
-        // std::cout << "jac4" << std::endl;
-        // std::cout << jac << std::endl;
-        // std::cout << "jac5" << std::endl;
-        // std::cout << mat * jac_pinocchio1 << std::endl;
-
-        tau.setZero();
-
-        return tau;
+        return jac.transpose() * (Eigen::Matrix<double, 6, 1>() << _r3_feedback.setReference(_r3_ref).action(_r3_curr), _so3_feedback.setReference(_so3_ref).action(_so3_curr)).finished();
     }
 
 protected:
-    // step
-    double _dt;
+    // reference state
+    R3 _r3_ref;
+    SO3 _so3_ref;
 
-    // desired final state
-    Eigen::Vector3d _xRef;
-    Eigen::Matrix3d _oRef;
+    // task space ds
+    controllers::LinearDynamics<Params, R3> _r3_ds;
+    controllers::LinearDynamics<Params, SO3> _so3_ds;
 
-    // // optitrack
-    // Optitrack _optitrack;
+    // task space controller (in this case this space is actually R3 x SO<3>)
+    controllers::Feedback<Params, R3> _r3_feedback;
+    controllers::Feedback<Params, SO3> _so3_feedback;
 
-    // stream
-    // Publisher _publisher;
-    // Subscriber _subscriber;
+    // Zmq
     Requester _requester;
-
-    bodies::MultiBodyPtr franka;
 };
 
 int main(int argc, char const* argv[])
 {
     Franka robot("franka");
 
-    robot.setJointController(std::make_unique<TaskController>());
+    robot.setJointController(std::make_unique<StreamController>());
 
     // robot.move();
     robot.torque();

@@ -3,13 +3,9 @@
 // Robot Handle
 #include <franka_control/Franka.hpp>
 
-// Optitrack Handle
-// #include <optitrack_lib/Optitrack.hpp>
-
 // Task Space Manifolds
-#include <control_lib/spatial/RN.hpp>
-#include <control_lib/spatial/SE3.hpp> // to test using the jacobian from Pinocchio
-#include <control_lib/spatial/SO3.hpp>
+#include <control_lib/spatial/R.hpp>
+#include <control_lib/spatial/SO.hpp>
 
 // Task Space Dynamical System
 #include <control_lib/controllers/LinearDynamics.hpp>
@@ -17,9 +13,15 @@
 // Task Space Derivative Controller
 #include <control_lib/controllers/Feedback.hpp>
 
+// Optitrack Handle
+#include <optitrack_lib/Optitrack.hpp>
+
 using namespace franka_control;
 using namespace control_lib;
-// using namespace optitrack_lib;
+using namespace optitrack_lib;
+
+using R3 = spatial::R<3>;
+using SO3 = spatial::SO<3, true>;
 
 struct Params {
     struct controller : public defaults::controller {
@@ -36,87 +38,80 @@ struct Params {
     };
 };
 
-class ExternalController : public control::JointControl {
+class R3SO3Controller : public control::JointControl {
 public:
-    ExternalController() : control::JointControl()
+    R3SO3Controller() : control::JointControl()
     {
-        // step
-        _dt = 0.01;
-
-        // translation feedback
-        Eigen::MatrixXd Dt = 1.0 * Eigen::MatrixXd::Identity(3, 3);
-        _translation_feedback.setDamping(Dt);
-
-        // rotation feedback
-        Eigen::MatrixXd Dr = 1.0 * Eigen::MatrixXd::Identity(3, 3);
-        _rotation_feedback.setDamping(Dr);
-
-        // translation ds
-        Eigen::MatrixXd At = 5.0 * Eigen::MatrixXd::Identity(3, 3);
-        _translation_ds.setDynamicsMatrix(At);
+        // reference
         Eigen::Vector3d position(0.683783, 0.308249, 0.185577);
-        _xRef._pos = position;
-        _translation_ds.setReference(_xRef);
-
-        // rotation ds
-        Eigen::MatrixXd Ar = 1.0 * Eigen::MatrixXd::Identity(3, 3);
-        _rotation_ds.setDynamicsMatrix(Ar);
         Eigen::Matrix3d orientation;
         orientation << 0.922046, 0.377679, 0.0846751,
             0.34527, -0.901452, 0.261066,
             0.17493, -0.211479, -0.9616;
-        _oRef._rot = orientation;
-        _rotation_ds.setReference(_oRef);
+
+        _r3_ref = R3(position);
+        _so3_ref = SO3(orientation);
+
+        // r3 ds
+        Eigen::MatrixXd At = 10.0 * Eigen::MatrixXd::Identity(3, 3);
+        _r3_ds.setDynamicsMatrix(At);
+        _r3_ds.setReference(_r3_ref);
+
+        // r3 feedback
+        Eigen::MatrixXd Dt = 5.0 * Eigen::MatrixXd::Identity(3, 3);
+        _r3_feedback.setDamping(Dt);
+
+        // rotation ds
+        Eigen::MatrixXd Ar = 10.0 * Eigen::MatrixXd::Identity(3, 3);
+        _so3_ds.setDynamicsMatrix(Ar);
+        _so3_ds.setReference(_so3_ref);
+
+        // so3 feedback
+        Eigen::MatrixXd Dr = 5.0 * Eigen::MatrixXd::Identity(3, 3);
+        _so3_feedback.setDamping(Dr);
     }
 
     Eigen::Matrix<double, 7, 1> action(const franka::RobotState& state) override
     {
-        // current task space state (ds input)
+        // current task space state
         auto pose = taskPose(state);
-        spatial::RN<3> xCurr(pose.translation());
-        spatial::SO3 oCurr(pose.rotation());
+        R3 _r3_curr(pose.translation());
+        SO3 _so3_curr(pose.linear());
 
-        auto jac = jacobian(state);
-        auto vel = jac * jointVelocity(state);
+        Eigen::Matrix<double, 6, 7> jac = jacobian(state);
+        Eigen::Matrix<double, 6, 1> vel = jac * jointVelocity(state);
+        _r3_curr._v = vel.head(3);
+        _so3_curr._v = vel.tail(3);
 
-        xCurr._vel = vel.head(3);
-        oCurr._vel = vel.tail(3);
+        // ds
+        _r3_ref._v = _r3_ds.action(_r3_curr);
+        _so3_ref._v = _so3_ds.action(_so3_curr);
 
-        // translation ds
-        _xRef._vel = _translation_ds.action(xCurr);
-
-        // rotation ds
-        _oRef._vel = _rotation_ds.action(oCurr);
-
-        auto tau = jac.transpose() * (Eigen::Matrix<double, 6, 1>() << _translation_feedback.setReference(_xRef).action(xCurr), _rotation_feedback.setReference(_oRef).action(oCurr)).finished();
-        // auto tau = jac.transpose() * (Eigen::Matrix<double, 6, 1>() << _translation_feedback.setReference(_xRef).action(xCurr), Eigen::Vector3d::Zero()).finished();
-        // std::cout << tau.transpose() << std::endl;
-
-        return tau;
+        return jac.transpose() * (Eigen::Matrix<double, 6, 1>() << _r3_feedback.setReference(_r3_ref).action(_r3_curr), _so3_feedback.setReference(_so3_ref).action(_so3_curr)).finished();
     }
 
 protected:
-    // step
-    double _dt;
-
     // reference state
-    spatial::RN<3> _xRef;
-    spatial::SO3 _oRef;
+    R3 _r3_ref;
+    SO3 _so3_ref;
 
     // task space ds
-    controllers::LinearDynamics<Params, spatial::RN<3>> _translation_ds;
-    controllers::LinearDynamics<Params, spatial::SO3> _rotation_ds;
+    controllers::LinearDynamics<Params, R3> _r3_ds;
+    controllers::LinearDynamics<Params, SO3> _so3_ds;
 
-    // task space controller (in this case this space is actually R3 x SO3)
-    controllers::Feedback<Params, spatial::RN<3>> _translation_feedback;
-    controllers::Feedback<Params, spatial::SO3> _rotation_feedback;
+    // task space controller (in this case this space is actually R3 x SO<3>)
+    controllers::Feedback<Params, R3> _r3_feedback;
+    controllers::Feedback<Params, SO3> _so3_feedback;
+
+    // optitrack
+    // Optitrack _optitrack;
 };
 
 int main(int argc, char const* argv[])
 {
     Franka robot("franka");
 
-    robot.setJointController(std::make_unique<ExternalController>());
+    robot.setJointController(std::make_unique<R3SO3Controller>());
 
     robot.torque();
 

@@ -6,7 +6,7 @@ int main(int argc, char const* argv[])
 {
     Franka robot("franka");
 
-    robot.record("outputs/record_2.csv", 100, 10);
+    robot.record("outputs/record_1.csv", 100, 10);
 
     return 0;
 }

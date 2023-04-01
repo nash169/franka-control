@@ -32,7 +32,7 @@ public:
 
         // goal
         spatial::R<7> ref((Eigen::Matrix<double, 7, 1>() << 0.300325, 0.596986, 0.140127, -1.44853, 0.15547, 2.31046, 0.690596).finished());
-        ref._vel = Eigen::Matrix<double, 7, 1>::Zero();
+        ref._v = Eigen::Matrix<double, 7, 1>::Zero();
 
         // set controller
         _controller.setStiffness(K).setDamping(D).setReference(ref);
@@ -42,7 +42,7 @@ public:
     {
         // current state
         spatial::R<7> curr(jointPosition(state));
-        curr._vel = jointVelocity(state);
+        curr._v = jointVelocity(state);
 
         // auto tau = _controller.action(curr);
 

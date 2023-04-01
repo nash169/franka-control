@@ -12,12 +12,13 @@ namespace franka_control {
     namespace control {
         class JointControl : public AbstractControl {
         public:
-            JointControl(const ControlMode& mode = ControlMode::CONFIGURATIONSPACE) : _mode(mode) {}
+            // JointControl(const ControlMode& mode = ControlMode::CONFIGURATIONSPACE) : _mode(mode) {}
+            JointControl() = default;
 
             virtual Eigen::Matrix<double, 7, 1> action(const franka::RobotState& state) = 0;
 
-        protected:
-            ControlMode _mode;
+            // protected:
+            //     ControlMode _mode;
         };
 
     } // namespace control

@@ -9,8 +9,10 @@ rep.configure("0.0.0.0", "5511")
 
 xR = np.array([0.683783, 0.308249, 0.185577])
 
+
+def dynamics(x):
+    return -10.0*(x-xR)
+
+
 while True:
-    x = rep.receive(np.float64, 3)
-    xdot = -10.0*(x-xR)
-    rep.send(xdot)
-    print(xdot)
+    x = rep.reply(dynamics, np.float64, 3)

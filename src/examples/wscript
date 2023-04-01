@@ -25,7 +25,11 @@
 
 import os
 
-required = {}
+required = {"joint_control.cpp": ["CONTROLLIB"],
+            "optitrack_reference.cpp": ["OPTITRACKLIB"],
+            "r3so3_control.cpp": ["CONTROLLIB"],
+            "se3_control.cpp": ["CONTROLLIB", "BEAUTIFULBULLET"],
+            "stream_control.cpp": ["CONTROLLIB", "OPTITRACKLIB", "ZMQSTREAM", "BEAUTIFULBULLET"]}
 optional = {}
 
 

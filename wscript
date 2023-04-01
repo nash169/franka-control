@@ -36,7 +36,7 @@ libdir = "franka_control"
 
 compiler = "cxx"
 required = ["libfranka", "utilslib"]
-optional = ["controllib"]
+optional = ["controllib", "optitracklib", "zmqstream", "beautifulbullet"]
 
 
 def options(opt):

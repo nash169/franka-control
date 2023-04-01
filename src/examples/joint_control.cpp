@@ -2,7 +2,7 @@
 
 #include <control_lib/controllers/Feedback.hpp>
 #include <control_lib/controllers/LinearDynamics.hpp>
-#include <control_lib/spatial/RN.hpp>
+#include <control_lib/spatial/R.hpp>
 
 using namespace franka_control;
 using namespace control_lib;
@@ -21,7 +21,8 @@ struct Params {
 
 class ConfigController : public control::JointControl {
 public:
-    ConfigController() : control::JointControl(ControlMode::CONFIGURATIONSPACE)
+    // ConfigController() : control::JointControl(ControlMode::CONFIGURATIONSPACE)
+    ConfigController() : control::JointControl()
     {
         // step
         _dt = 0.01;
@@ -30,7 +31,7 @@ public:
         Eigen::MatrixXd K = 10 * Eigen::MatrixXd::Identity(7, 7), D = 1 * Eigen::MatrixXd::Identity(7, 7);
 
         // goal
-        spatial::RN<7> ref((Eigen::Matrix<double, 7, 1>() << 0.300325, 0.596986, 0.140127, -1.44853, 0.15547, 2.31046, 0.690596).finished());
+        spatial::R<7> ref((Eigen::Matrix<double, 7, 1>() << 0.300325, 0.596986, 0.140127, -1.44853, 0.15547, 2.31046, 0.690596).finished());
         ref._vel = Eigen::Matrix<double, 7, 1>::Zero();
 
         // set controller
@@ -40,7 +41,7 @@ public:
     Eigen::Matrix<double, 7, 1> action(const franka::RobotState& state) override
     {
         // current state
-        spatial::RN<7> curr(jointPosition(state));
+        spatial::R<7> curr(jointPosition(state));
         curr._vel = jointVelocity(state);
 
         // auto tau = _controller.action(curr);
@@ -55,7 +56,7 @@ protected:
     double _dt;
 
     // controller
-    controllers::Feedback<Params, spatial::RN<7>> _controller;
+    controllers::Feedback<Params, spatial::R<7>> _controller;
 };
 
 int main(int argc, char const* argv[])

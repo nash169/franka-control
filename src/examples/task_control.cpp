@@ -1,49 +1,20 @@
-#include <control_lib/controllers/Feedback.hpp>
-#include <control_lib/controllers/LinearDynamics.hpp>
-#include <control_lib/spatial/RN.hpp>
-#include <control_lib/spatial/SE3.hpp>
-#include <franka_control/Franka.hpp>
 #include <iostream>
 
+// Robot Handle
+#include <franka_control/Franka.hpp>
+
 using namespace franka_control;
-using namespace control_lib;
-
-struct Params {
-    struct controller : public defaults::controller {
-        // Integration time step controller
-        PARAM_SCALAR(double, dt, 0.01);
-    };
-
-    struct feedback : public defaults::feedback {
-        // Output dimension
-        PARAM_SCALAR(size_t, d, 6);
-    };
-
-    struct linear_dynamics : public defaults::linear_dynamics {
-    };
-};
 
 class TaskController : public control::JointControl {
 public:
-    TaskController() : control::JointControl(ControlMode::OPERATIONSPACE)
+    // TaskController() : control::JointControl(ControlMode::OPERATIONSPACE)
+    TaskController() : control::JointControl()
     {
-        // step
-        _dt = 0.01;
-
-        // set controller gains
-        Eigen::MatrixXd D = 0.1 * Eigen::MatrixXd::Identity(6, 6);
-        _controller.setDamping(D);
-
-        // set ds gains
-        Eigen::MatrixXd A = 0.05 * Eigen::MatrixXd::Identity(6, 6);
-        _ds.setDynamicsMatrix(A);
-
-        // set ds attractor
+        // ref
         _xRef << 0.683783, 0.308249, 0.185577;
         _oRef << 0.922046, 0.377679, 0.0846751,
             0.34527, -0.901452, 0.261066,
             0.17493, -0.211479, -0.9616;
-        _ds.setReference(spatial::SE3(_oRef, _xRef));
     }
 
     Eigen::Matrix<double, 7, 1> action(const franka::RobotState& state) override
@@ -77,33 +48,13 @@ public:
         Eigen::MatrixXd D = 5 * Eigen::MatrixXd::Identity(6, 6);
         auto force = -D * (jac * jointVelocity(state) - x_dot);
 
-        // // current state (ds input)
-        // auto pose = taskPose(state);
-        // spatial::SE3 curr(pose.linear(), pose.translation());
-        // curr._vel = jac * jointVelocity(state);
-
-        // // reference state
-        // _ref._vel = _ds.action(curr);
-
-        // return jac.transpose() * _controller.setReference(_ref).action(curr);
-
         return jac.transpose() * force;
     }
 
 protected:
-    // step
-    double _dt;
-
     // desired final state
-    spatial::SE3 _ref;
     Eigen::Vector3d _xRef;
     Eigen::Matrix3d _oRef;
-
-    // ds
-    controllers::LinearDynamics<Params, spatial::SE3> _ds;
-
-    // controller
-    controllers::Feedback<Params, spatial::SE3> _controller;
 };
 
 int main(int argc, char const* argv[])

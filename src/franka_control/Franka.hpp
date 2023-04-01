@@ -8,6 +8,7 @@
 #include <future>
 #include <iostream>
 #include <memory>
+#include <shared_mutex>
 #include <thread>
 #include <utils_lib/FileManager.hpp>
 
@@ -75,29 +76,43 @@ namespace franka_control {
 
         void torque(const size_t& delay = 1)
         {
-            Eigen::Matrix<double, 7, 1> tau = Eigen::Matrix<double, 7, 1>::Zero();
+            // Eigen::Matrix<double, 7, 1> tau = Eigen::Matrix<double, 7, 1>::Zero();
+            _control.setZero();
+            std::atomic<bool> stop = false;
 
-            auto start = [&]() -> Eigen::Matrix<double, 7, 1> {
-                std::this_thread::sleep_for(std::chrono::seconds(delay));
-                std::cout << "Start Torque Control" << std::endl;
-                // std::this_thread::sleep_for(3s);
-                return Eigen::Matrix<double, 7, 1>::Zero();
+            // auto init = [&]() -> Eigen::Matrix<double, 7, 1> {
+            //     // std::this_thread::sleep_for(std::chrono::seconds(delay));
+            //     // std::cout << "Start Torque Control" << std::endl;
+            //     return Eigen::Matrix<double, 7, 1>::Zero();
+            // };
+
+            auto control = [&]() {
+                while (!stop) {
+                    // Read state
+                    std::unique_lock<std::shared_mutex> guard(_mutex);
+                    franka::RobotState state = _state;
+                    guard.unlock();
+
+                    // Compute controller
+                    Eigen::Matrix<double, 7, 1> control = _joint_controller->action(_state);
+
+                    // Write controller
+                    guard.lock();
+                    _control = control;
+                }
             };
 
-            auto task = std::async(std::launch::async, start);
+            std::thread control_thread(control);
 
             auto controller = [&](const franka::RobotState& robot_state, franka::Duration period) -> franka::Torques {
-                if (task.wait_for(0ms) == std::future_status::ready) {
-                    tau = task.get();
-                    task = std::async(std::launch::async, &control::JointControl::action, _joint_controller.get(), robot_state);
-                    // task = std::async(std::launch::async, start);
-                }
-
-                return {{tau[0], tau[1], tau[2], tau[3], tau[4], tau[5], tau[6]}};
+                std::shared_lock<std::shared_mutex> guard(_mutex);
+                _state = robot_state;
+                return {{_control[0], _control[1], _control[2], _control[3], _control[4], _control[5], _control[6]}};
             };
 
             try {
                 _robot->control(controller);
+                stop = true;
             }
             catch (const std::exception& e) {
                 std::cerr << e.what() << '\n';
@@ -223,9 +238,15 @@ namespace franka_control {
         // Model
         std::shared_ptr<franka::Model> _model;
 
+        // State & Control
+        franka::RobotState _state;
+        Eigen::Matrix<double, 7, 1> _control;
+
         // Controllers
         std::unique_ptr<control::JointControl> _joint_controller;
         std::unique_ptr<control::TaskControl> _task_controller;
+
+        std::shared_mutex _mutex;
     };
 } // namespace franka_control
 

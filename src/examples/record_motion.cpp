@@ -6,7 +6,8 @@ int main(int argc, char const* argv[])
 {
     Franka robot("franka");
 
-    robot.record("outputs/record_1.csv", 100, 10);
+    std::string num_record = (argc > 1) ? argv[1] : "1";
+    robot.record("outputs/record_" + num_record + ".csv", 100, 10);
 
     return 0;
 }

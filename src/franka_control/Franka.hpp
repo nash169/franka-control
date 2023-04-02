@@ -184,7 +184,7 @@ namespace franka_control {
             auto start = [&]() {
                 std::this_thread::sleep_for(std::chrono::seconds(delay));
                 std::cout << "Start Recording" << std::endl;
-                recorder.write("joint position - joint velocity - ee pose -- ee velocity - torque");
+                // recorder.write("joint position - joint velocity - ee pose -- ee velocity - torque");
             };
 
             auto task = std::async(std::launch::async, start);

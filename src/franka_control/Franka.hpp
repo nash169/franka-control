@@ -189,8 +189,8 @@ namespace franka_control {
 
             auto task = std::async(std::launch::async, start);
 
-            auto record = [&](const franka::RobotState& state, franka::Duration period) {
-                Eigen::Matrix<double, 1, 33> record_vec;
+            auto record = [&](const franka::RobotState& state) {
+                Eigen::Matrix<double, 1, 40> record_vec;
 
                 // Joint position
                 record_vec.head(7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.q.data());
@@ -207,7 +207,10 @@ namespace franka_control {
                 record_vec.segment(20, 6) = Eigen::Map<const Eigen::Matrix<double, 6, 7>>(_model->zeroJacobian(franka::Frame::kEndEffector, state).data()) * record_vec.segment(7, 7).transpose();
 
                 // Torques
-                record_vec.tail(7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.tau_J.data());
+                record_vec.segment(26, 7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(state.tau_J.data());
+
+                // Gravity
+                record_vec.tail(7) = Eigen::Map<const Eigen::Matrix<double, 7, 1>>(_model->gravity(state).data());
 
                 recorder.append(record_vec);
             };
@@ -216,7 +219,7 @@ namespace franka_control {
 
             auto control_callback = [&](const franka::RobotState& robot_state, franka::Duration period) -> franka::Torques {
                 if (task.wait_for(0ms) == std::future_status::ready && (time * frequency) % 1000 == 0)
-                    task = std::async(std::launch::async, record, robot_state, period);
+                    task = std::async(std::launch::async, record, robot_state);
 
                 time += period.toMSec();
 

@@ -90,7 +90,7 @@ namespace franka_control {
                 while (!stop) {
                     // Read state
                     std::unique_lock<std::shared_mutex> guard(_mutex);
-                    franka::RobotState state = _state;
+                    // franka::RobotState state = _state;
                     guard.unlock();
 
                     // Compute controller

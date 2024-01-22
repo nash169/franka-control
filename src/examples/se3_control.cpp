@@ -9,10 +9,7 @@
 // Robot Model
 #include <beautiful_bullet/bodies/MultiBody.hpp>
 
-// Task Space Dynamical System
-#include <control_lib/controllers/LinearDynamics.hpp>
-
-// Task Space Derivative Controller
+// Task Space Dynamical System & Derivative Controller
 #include <control_lib/controllers/Feedback.hpp>
 
 using namespace franka_control;
@@ -29,9 +26,6 @@ struct Params {
         // Output dimension
         PARAM_SCALAR(size_t, d, 6);
     };
-
-    struct linear_dynamics : public defaults::linear_dynamics {
-    };
 };
 
 class SE3Controller : public franka_control::control::JointControl {
@@ -44,17 +38,14 @@ public:
         orientation << 0.922046, 0.377679, 0.0846751,
             0.34527, -0.901452, 0.261066,
             0.17493, -0.211479, -0.9616;
-
         _se3_ref = spatial::SE<3>(orientation, position);
 
         // ds
-        Eigen::MatrixXd A = 1.0 * Eigen::MatrixXd::Identity(3, 3);
-        _se3_ds.setDynamicsMatrix(A);
-        _se3_ds.setReference(_se3_ref);
+        _se3_ds.setStiffness(10.0 * Eigen::MatrixXd::Identity(6, 6))
+            .setReference(_se3_ref);
 
-        // feedback
-        Eigen::MatrixXd D = 1.0 * Eigen::MatrixXd::Identity(3, 3);
-        _se3_feedback.setDamping(D);
+        // ctr
+        _se3_ctr.setDamping(1.0 * Eigen::MatrixXd::Identity(6, 6));
 
         // model
         _model = std::make_shared<bodies::MultiBody>("models/franka/urdf/panda.urdf");
@@ -72,7 +63,8 @@ public:
         // ds
         _se3_ref._v = _se3_ds.action(_se3_curr);
 
-        return jac.transpose() * _se3_feedback.setReference(_se3_ref).action(_se3_curr);
+        // ctr
+        return jac.transpose() * _se3_ctr.setReference(_se3_ref).action(_se3_curr);
     }
 
 protected:
@@ -80,12 +72,10 @@ protected:
     spatial::SE<3> _se3_ref;
 
     // task space ds
-    controllers::LinearDynamics<Params, spatial::SE<3>> _se3_ds;
-
-    // task space controller (in this case this space is actually R3 x SO3)
-    controllers::Feedback<Params, spatial::SE<3>> _se3_feedback;
-
-    // Model
+    controllers::Feedback<Params, spatial::SE<3>> _se3_ds;
+    // task space controller
+    controllers::Feedback<Params, spatial::SE<3>> _se3_ctr;
+    // model
     bodies::MultiBodyPtr _model;
 };
 

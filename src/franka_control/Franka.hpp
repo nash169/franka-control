@@ -44,6 +44,11 @@ namespace franka_control {
             return *_robot;
         }
 
+        franka::RobotState state()
+        {
+            return _robot->readOnce();
+        }
+
         Franka& setJointController(std::unique_ptr<control::JointControl> controller)
         {
             _joint_controller = std::move(controller);

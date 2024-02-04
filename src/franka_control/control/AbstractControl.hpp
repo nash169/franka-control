@@ -25,6 +25,11 @@ namespace franka_control {
                 return Eigen::Map<const Eigen::Matrix<double, 6, 7>>(_model->zeroJacobian(franka::Frame::kEndEffector, state).data());
             }
 
+            Eigen::Matrix<double, 7, 7> mass(const franka::RobotState& state)
+            {
+                return Eigen::Map<const Eigen::Matrix<double, 7, 7>>(_model->mass(state).data());
+            }
+
             // Get joint position
             Eigen::Matrix<double, 7, 1> jointPosition(const franka::RobotState& state)
             {

@@ -17,6 +17,7 @@
 #include "franka_control/tools/common.hpp"
 
 using namespace std::chrono_literals;
+using namespace std::chrono;
 
 namespace franka_control {
     class Franka {
@@ -99,7 +100,13 @@ namespace franka_control {
                     guard.unlock();
 
                     // Compute controller
+                    auto now = std::chrono::steady_clock::now();
                     Eigen::Matrix<double, 7, 1> control = _joint_controller->action(_state);
+                    auto dt = std::chrono::steady_clock::now() - now;
+                    if (dt < 5ms) {
+                        auto next = now + 5ms - dt;
+                        std::this_thread::sleep_until(next);
+                    }
 
                     // Write controller
                     guard.lock();
